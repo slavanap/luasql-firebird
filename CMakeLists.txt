@@ -9,6 +9,12 @@ cmake_minimum_required ( VERSION 2.8 )
 include ( cmake/dist.cmake )
 include ( lua )
 
+include_directories ( src )
+
 find_package ( Firebird REQUIRED )
-include_directories ( ${FIREBIRD_INCLUDE_DIRECTORIES} src )
+include_directories ( SYSTEM ${FIREBIRD_INCLUDE_DIR} )
 install_lua_module ( luasql.firebird src/ls_firebird.c src/luasql.c LINK ${FIREBIRD_LIBRARIES} )
+
+find_package ( PostgreSQL REQUIRED )
+include_directories ( SYSTEM ${PostgreSQL_INCLUDE_DIRS} )
+install_lua_module ( luasql.postgres src/ls_postgres.c src/luasql.c LINK ${PostgreSQL_LIBRARIES} )

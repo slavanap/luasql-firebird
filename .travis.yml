@@ -1,51 +1,51 @@
-#
-# LuaDist Travis-CI Hook
-#
-
-# We assume C build environments
 language: C
+dist: xenial
+group: edge
 
-# Try using multiple Lua Implementations
-env:
-  - TOOL="gcc"                  # Use native compiler (GCC usually)
-  - TOOL="clang"                # Use clang
-  - TOOL="i686-w64-mingw32"     # 32bit MinGW
-  - TOOL="x86_64-w64-mingw32"   # 64bit MinGW
-  - TOOL="arm-linux-gnueabihf"  # ARM hard-float (hf), linux
-
-# Crosscompile builds may fail
-matrix:
-  allow_failures:
-    - env: TOOL="i686-w64-mingw32"
-    - env: TOOL="x86_64-w64-mingw32"
-    - env: TOOL="arm-linux-gnueabihf"
-
-# Install dependencies
-install:
-  - git clone git://github.com/LuaDist/Tools.git ~/_tools
-  - ~/_tools/travis/travis install
-
-# Bootstap
-before_script:
-  - ~/_tools/travis/travis bootstrap
-
-# Build the module
-script:
-  - ~/_tools/travis/travis build
-
-# Execute additional tests or commands
-after_script:
-  - ~/_tools/travis/travis test
-
-# Only watch the master branch
 branches:
   only:
     - master
 
-# Notify the LuaDist Dev group if needed
-notifications:
-  recipients:
-    - luadist-dev@googlegroups.com
-  email:
-    on_success: change
-    on_failure: always
+addons:
+  apt:
+    update: true
+    packages:
+      - liblua5.2-dev
+      - firebird-dev
+      - postgresql-server-dev-all
+      - cmake
+      - lsb-release
+      - fakeroot
+      - sshpass
+
+env:
+  global:
+    - CFLAGS=-mtune=ivybridge
+    - CXXFLAGS=-mtune=ivybridge
+    - DEBVERSION=0.1
+    - DEBNAME=luasql
+
+script:
+  - mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release .. && make -j$(nproc)
+  - |
+    mkdir -p pkg/DEBIAN pkg/usr/lib/x86_64-linux-gnu/lua/5.2 && mv luasql pkg/usr/lib/x86_64-linux-gnu/lua/5.2
+    export DEVFULLVER="${DEBVERSION}-${TRAVIS_BUILD_NUMBER}~$(lsb_release -sc)"
+    echo "Package: ${DEBNAME}"                                              >> pkg/DEBIAN/control
+    echo "Priority: extra"                                                  >> pkg/DEBIAN/control
+    echo "Installed-Size: $(du -s pkg | cut -f1)"                           >> pkg/DEBIAN/control
+    echo "Maintainer: Vyacheslav Napadovsky <napadovskiy@gmail.com>"        >> pkg/DEBIAN/control
+    echo "Architecture: $(dpkg --print-architecture)"                       >> pkg/DEBIAN/control
+    echo "Version: ${DEVFULLVER}"                                           >> pkg/DEBIAN/control
+    echo "Depends: liblua5.2-dev, firebird-dev, postgresql-server-dev-all"  >> pkg/DEBIAN/control
+    echo "Provides: ${DEBNAME}"                                             >> pkg/DEBIAN/control
+    echo "Description: LuaSQL is a simple interface from Lua to a DBMS."    >> pkg/DEBIAN/control
+    echo "  Full project description and source code available here:"       >> pkg/DEBIAN/control
+    echo "  https://github.com/LuaDist/luasql-firebird"                     >> pkg/DEBIAN/control
+  - fakeroot dpkg -b pkg luasql-${DEVFULLVER}.deb
+
+sudo: required # for success MTU change for deployment
+after_success:
+  - for i in $(ls -1 /sys/class/net/*/device/uevent | sed -E 's/\/sys\/class\/net\/(.*)\/device\/uevent/\1/'); do sudo ip li set mtu 1280 dev "$i"; done
+  - echo "|1|nzZKCikLr+tsi27ylJ7adz47GXE=|W2pwQvdM5j19Rqq620QTuMYwwmI= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBNmsw4KKYO4+S1YgN4NlJAI2Go2CWmW0GSPZYjhQnZajymY9wrfCTgsM2P9ftjQsUyEfF/xZ0rzwbyO+24UE3yo=" >> ~/.ssh/known_hosts
+  - echo "|1|T0BmqSAJpjm0CCZ/u/c6cZjsJag=|buN/LKptrNcqh/Q9ZO30qbhzo0c= ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBNmsw4KKYO4+S1YgN4NlJAI2Go2CWmW0GSPZYjhQnZajymY9wrfCTgsM2P9ftjQsUyEfF/xZ0rzwbyO+24UE3yo=" >> ~/.ssh/known_hosts
+  - travis_retry sshpass -e sftp -oBatchMode=no -b - $SFTP_SERVER <<< $"put luasql-${DEVFULLVER}.deb"
